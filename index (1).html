@@ -1,0 +1,893 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moon Base Power Planner</title>
+<style>
+:root{--bg:#0b1020;--panel:#121a30;--panel2:#18223f;--line:#243256;--tx:#e6ebf5;--mut:#8a97b5;--acc:#5eead4;--warn:#fbbf24;--bad:#f87171;--ok:#4ade80;--info:#60a5fa}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--tx);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+h1{font-size:20px;margin:0}
+h2{font-size:15px;margin:0 0 10px}
+a{color:var(--acc)}
+hr{border:0;border-top:1px solid var(--line);margin:16px 0}
+.muted{color:var(--mut)}.small{font-size:12px}
+.err{color:var(--bad);margin:8px 0;white-space:pre-wrap}
+.note{background:#3a2f12;border:1px solid #6b5416;color:var(--warn);padding:8px 10px;border-radius:8px;margin:10px 0}
+
+/* shell */
+.shell{display:flex;min-height:100vh}
+aside{width:210px;background:var(--panel);border-right:1px solid var(--line);padding:14px 10px;position:sticky;top:0;height:100vh;overflow:auto;flex:none}
+.brand{font-weight:700;color:var(--acc);padding:4px 8px 14px;letter-spacing:.3px}
+.navgrp{font-size:11px;text-transform:uppercase;color:var(--mut);padding:12px 8px 4px}
+aside a{display:block;padding:7px 10px;border-radius:8px;color:var(--tx);text-decoration:none;cursor:pointer}
+aside a:hover{background:var(--panel2)}
+aside a.on{background:var(--panel2);color:var(--acc)}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+header{display:flex;gap:12px;align-items:center;padding:10px 20px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:5}
+header .sp{flex:1}
+#content{padding:20px;max-width:1200px;width:100%}
+.head{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.head .sp{flex:1}
+@media(max-width:800px){.shell{flex-direction:column}aside{width:100%;height:auto;position:static;display:flex;flex-wrap:wrap;gap:4px}.navgrp{display:none}}
+
+/* components */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.stat b{display:block;font-size:20px;margin-top:2px}
+.btn{background:var(--panel2);color:var(--tx);border:1px solid var(--line);padding:7px 12px;border-radius:8px;cursor:pointer;font:inherit}
+.btn:hover{border-color:var(--acc)}
+.btn.primary{background:var(--acc);color:#04201c;border-color:var(--acc);font-weight:600}
+.btn.danger{color:var(--bad)}
+.btn.sm{padding:3px 8px;font-size:12px}
+.btn.wide{width:100%;margin-top:6px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+input,select{background:#0e1630;color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font:inherit;width:100%}
+input[type=checkbox]{width:auto}
+input:focus,select:focus{outline:1px solid var(--acc)}
+label{display:block;margin-bottom:10px}
+label>span.lbl,.fld>span.lbl{display:block;color:var(--mut);font-size:12px;margin-bottom:3px}
+.row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px}
+.row label{margin:0;min-width:140px;flex:1}
+.row .btn{height:34px}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mut);font-weight:500;font-size:12px;text-transform:uppercase}
+td.act{white-space:nowrap;text-align:right}
+td.act .btn{margin-left:4px}
+.tblwrap{overflow-x:auto}
+.badge{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;border:1px solid}
+.badge.ok{color:var(--ok);border-color:#1f5a35;background:#10301d}
+.badge.warn{color:var(--warn);border-color:#6b5416;background:#33290c}
+.badge.bad{color:var(--bad);border-color:#7a2b2b;background:#3a1717}
+.badge.info{color:var(--info);border-color:#264a7a;background:#12243f}
+.badge.mute{color:var(--mut);border-color:var(--line)}
+.alert{padding:9px 12px;border-radius:8px;margin-bottom:8px;border:1px solid;display:flex;gap:10px}
+.alert.ok{border-color:#1f5a35;background:#10301d}
+.alert.warn{border-color:#6b5416;background:#33290c}
+.alert.bad{border-color:#7a2b2b;background:#3a1717}
+.bar{height:6px;background:#0e1630;border-radius:4px;overflow:hidden;min-width:70px;margin-top:4px}
+.bar i{display:block;height:100%;background:var(--acc)}
+.chartwrap{position:relative;margin:6px 0 14px}
+.chartwrap canvas{width:100%;height:230px;display:block;background:#0e1630;border-radius:8px}
+.chartwrap.short canvas{height:150px}
+.tip{display:none;position:absolute;pointer-events:none;background:#000c;border:1px solid var(--line);padding:6px 8px;border-radius:6px;font-size:12px;z-index:2;white-space:nowrap}
+.legend span{margin-right:14px;font-size:12px;color:var(--mut)}
+.legend i{display:inline-block;width:12px;height:3px;margin-right:5px;vertical-align:middle}
+
+/* modal + toast */
+.modalbg{position:fixed;inset:0;background:#000a;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;z-index:20}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;width:100%;max-width:480px}
+.modal .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.multi{max-height:170px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:#0e1630}
+.multi label{margin:3px 0;display:flex;gap:6px;align-items:center}
+.fld.chk{display:flex;gap:8px;align-items:center}
+#toasts{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:50}
+.toast{padding:9px 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);max-width:380px}
+.toast.err{border-color:#7a2b2b;color:var(--bad);margin:0}
+.toast.ok{border-color:#1f5a35}
+
+/* auth */
+.authwrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+.auth{width:100%;max-width:400px}
+.auth h1{margin-bottom:12px;color:var(--acc)}
+.tabs{display:flex;gap:6px;margin-bottom:12px}
+.tabs button{flex:1;background:var(--panel2);color:var(--mut);border:1px solid var(--line);padding:7px;border-radius:8px;cursor:pointer;font:inherit}
+.tabs button.on{color:var(--acc);border-color:var(--acc)}
+pre{background:#0e1630;padding:10px;border-radius:8px;overflow:auto;margin:0}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toasts"></div>
+
+<script>
+/* ======================================================================
+   Moon Base Power Planner - frontend
+   All timestamps from the API are naive UTC. Everything shown/entered here is UTC.
+   ====================================================================== */
+
+// ---------- tiny helpers ----------
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const store = {
+  get(k){ try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v){ try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} }
+};
+const sess = {
+  get(k){ try { return sessionStorage.getItem(k); } catch { return null; } },
+  set(k, v){ try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch {} }
+};
+const num = n => n == null ? '—' : Number(n).toLocaleString(undefined, {maximumFractionDigits: 2});
+const sum = (list, key) => (list || []).reduce((a, o) => a + (+o[key] || 0), 0);
+const pretty = s => String(s).replaceAll('_', ' ');
+// naive ISO from API -> Date (treat as UTC)
+const pd = s => new Date(/Z$|[+-]\d\d:?\d\d$/.test(s) ? s : s + 'Z');
+const fmt = s => s ? String(s).slice(0, 16).replace('T', ' ') : '—';
+const fmtD = d => d.toISOString().slice(0, 16).replace('T', ' ');
+const toIso = v => (v.length === 16 ? v + ':00Z' : v + 'Z');       // datetime-local value -> UTC ISO
+const toInput = s => String(s).slice(0, 16);
+const nowInput = () => { const d = new Date(); d.setUTCMinutes(0, 0, 0); return d.toISOString().slice(0, 16); };
+const addInput = h => { const d = new Date(); d.setUTCMinutes(0, 0, 0); return new Date(d.getTime() + h * 3600e3).toISOString().slice(0, 16); };
+const addH = (s, h) => fmtD(new Date(pd(s).getTime() + h * 3600e3));
+const nm = (list, id) => { const o = (list || []).find(x => x.id === id); return o ? esc(o.name) : (id == null ? '—' : '#' + id); };
+const nmRaw = (list, id) => { const o = (list || []).find(x => x.id === id); return o ? o.name : '#' + id; };
+
+const BADGE = {available:'ok', in_use:'info', offline:'mute', planned:'info', in_progress:'warn', done:'ok', cancelled:'mute',
+               in_transit:'info', arrived:'warn', installed:'ok', delayed:'bad'};
+const badge = s => `<span class="badge ${BADGE[s] || 'mute'}">${esc(pretty(s))}</span>`;
+const prioBadge = p => `<span class="badge ${p >= 4 ? 'bad' : p === 3 ? 'warn' : 'mute'}">P${p}</span>`;
+const ENUMS = {
+  equipment: ['available', 'in_use', 'offline'],
+  task: ['planned', 'in_progress', 'done', 'cancelled'],
+  delivery: ['in_transit', 'arrived', 'installed', 'delayed']
+};
+
+// ---------- state ----------
+const S = {
+  api: (store.get('api') === 'http://127.0.0.1:8000'
+    ? 'http://127.0.0.1:8081'
+    : store.get('api') || 'http://127.0.0.1:8081').replace(/\/+$/, ''),
+  token: sess.get('token'),
+  me: null,
+  sites: [],
+  siteId: store.get('site') ? +store.get('site') : null,
+  d: {},                 // per-site data (lists)
+  view: 'dashboard',
+  authMode: 'login',
+  form: null,
+  filter: '',
+  redraw: null,
+  plBattery: 'all'
+};
+const role = () => S.me?.role?.name;
+const isAdmin = () => role() === 'admin';
+const canWrite = () => role() === 'admin' || role() === 'planner';
+
+// ---------- API ----------
+class ApiError extends Error { constructor(status, msg){ super(msg); this.status = status; } }
+function fmtDetail(d){
+  if (!d) return 'Request failed';
+  const x = d.detail;
+  if (typeof x === 'string') return x;
+  if (Array.isArray(x)) return x.map(e => `${(e.loc || []).filter(p => p !== 'body' && p !== 'query').join('.')}: ${e.msg}`).join('; ');
+  return JSON.stringify(d);
+}
+async function api(method, path, body){
+  const headers = {};
+  if (S.token) headers.Authorization = 'Bearer ' + S.token;
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  let res;
+  try {
+    res = await fetch(S.api + path, {method, headers, body: body !== undefined ? JSON.stringify(body) : undefined});
+  } catch (e) {
+    throw new ApiError(0, `Cannot reach the API at ${S.api}. Is uvicorn running?`);
+  }
+  if (res.status === 204) return null;
+  let data = null;
+  try { data = await res.json(); } catch {}
+  if (!res.ok) {
+    if (res.status === 401 && S.token && !path.startsWith('/auth/login')) logout(true);
+    throw new ApiError(res.status, fmtDetail(data));
+  }
+  return data;
+}
+
+// ---------- toast + modal ----------
+function toast(msg, kind = 'ok'){
+  const t = document.createElement('div');
+  t.className = 'toast ' + kind;
+  t.textContent = msg;
+  $('#toasts').appendChild(t);
+  setTimeout(() => t.remove(), kind === 'err' ? 6000 : 2500);
+}
+function modal(html){
+  closeModal();
+  const m = document.createElement('div');
+  m.className = 'modalbg'; m.id = 'modal';
+  m.innerHTML = `<div class="modal">${html}</div>`;
+  m.addEventListener('mousedown', e => { if (e.target === m) closeModal(); });
+  document.body.appendChild(m);
+  const first = m.querySelector('input,select');
+  if (first) first.focus();
+}
+function closeModal(){ $('#modal')?.remove(); }
+
+// ======================================================================
+// Auth
+// ======================================================================
+function authScreen(note){
+  const reg = S.authMode === 'register';
+  $('#app').innerHTML = `<div class="authwrap"><div class="card auth">
+    <h1>Moon Base Power Planner</h1>
+    <div class="tabs">
+      <button class="${reg ? '' : 'on'}" onclick="setAuth('login')">Sign in</button>
+      <button class="${reg ? 'on' : ''}" onclick="setAuth('register')">Create account</button>
+    </div>
+    ${note ? `<div class="note">${esc(note)}</div>` : ''}
+    <form onsubmit="return authSubmit(event)">
+      ${reg ? '<label><span class="lbl">Username</span><input name="username" required maxlength="50"></label>' : ''}
+      <label><span class="lbl">Email</span><input name="email" type="email" required maxlength="120"></label>
+      <label><span class="lbl">Password${reg ? ' (8–64 characters)' : ''}</span><input name="password" type="password" required ${reg ? 'minlength="8" maxlength="64"' : ''}></label>
+      <div class="err" id="autherr"></div>
+      <button class="btn primary wide">${reg ? 'Create account' : 'Sign in'}</button>
+    </form>
+    ${reg ? '<p class="muted small">New accounts are viewers. The first account created in an empty database becomes admin.</p>' : ''}
+    <hr>
+    <label><span class="lbl">API URL</span><input id="apiurl" value="${esc(S.api)}"></label>
+    <div class="row"><button class="btn sm" onclick="saveApi()">Save &amp; test connection</button><span id="apist" class="muted small"></span></div>
+  </div></div>`;
+}
+function setAuth(m){ S.authMode = m; authScreen(); }
+async function saveApi(){
+  const v = $('#apiurl').value.trim().replace(/\/+$/, '');
+  S.api = v; store.set('api', v);
+  const st = $('#apist'); st.textContent = 'Testing…';
+  try { const r = await api('GET', '/'); st.textContent = 'Connected: ' + (r.status || 'ok'); }
+  catch (e) { st.textContent = e.message; }
+}
+async function authSubmit(ev){
+  ev.preventDefault();
+  const f = ev.target, err = $('#autherr'); err.textContent = '';
+  const email = f.email.value.trim(), password = f.password.value;
+  try {
+    if (S.authMode === 'register') {
+      const u = await api('POST', '/auth/register', {username: f.username.value.trim(), email, password});
+      toast(`Account created (role: ${u.role.name})`);
+    }
+    const t = await api('POST', '/auth/login', {email, password});
+    S.token = t.access_token; sess.set('token', S.token);
+    await boot();
+  } catch (e) { err.textContent = e.message; }
+  return false;
+}
+function logout(expired){
+  S.token = null; sess.set('token', null); S.me = null;
+  closeModal();
+  authScreen(expired === true ? 'Session expired (tokens last 30 minutes). Sign in again.' : '');
+}
+
+async function boot(){
+  if (!S.token) { authScreen(); return; }
+  try {
+    S.me = await api('GET', '/auth/me');
+    await loadSites();
+    renderShell();
+    const h = location.hash.replace('#/', '');
+    go(VIEWS[h] ? h : 'dashboard');
+  } catch (e) {
+    if (!S.token) return;
+    authScreen(e.message);
+  }
+}
+
+// ======================================================================
+// Shell / routing
+// ======================================================================
+const NAV = [
+  ['Overview', [['dashboard','Dashboard'], ['planner','Planner']]],
+  ['Operations', [['tasks','Tasks'], ['equipment','Equipment'], ['deliveries','Deliveries'], ['teams','Teams']]],
+  ['Infrastructure', [['habitats','Habitats'], ['power','Power sources'], ['batteries','Batteries'], ['illumination','Illumination']]],
+  ['Admin', [['sites','Sites'], ['users','Users'], ['settings','Settings']]]
+];
+function renderShell(){
+  $('#app').innerHTML = `<div class="shell">
+    <aside><div class="brand">MOON BASE PLANNER</div>
+      ${NAV.map(([g, items]) => `<div class="navgrp">${g}</div>` + items
+        .filter(([k]) => k !== 'users' || isAdmin())
+        .map(([k, l]) => `<a data-v="${k}" onclick="go('${k}')">${l}</a>`).join('')).join('')}
+    </aside>
+    <div class="main"><header id="top"></header><main id="content"></main></div></div>`;
+  renderTop();
+}
+function renderTop(){
+  $('#top').innerHTML = `
+    <label style="margin:0;min-width:200px"><select id="sitesel" onchange="pickSite(+this.value)">
+      ${S.sites.length ? S.sites.map(s => `<option value="${s.id}" ${s.id === S.siteId ? 'selected' : ''}>${esc(s.name)}</option>`).join('') : '<option value="">No sites</option>'}
+    </select></label>
+    <span class="muted small">All times UTC</span><span class="sp"></span>
+    <span>${esc(S.me.username)} <span class="badge ${isAdmin() ? 'warn' : canWrite() ? 'info' : 'mute'}">${esc(role())}</span></span>
+    <button class="btn sm" onclick="logout()">Sign out</button>`;
+}
+function go(v){
+  if (!VIEWS[v]) v = 'dashboard';
+  S.view = v; S.filter = ''; S.redraw = null;
+  if (location.hash !== '#/' + v) location.hash = '#/' + v;
+  document.querySelectorAll('aside a').forEach(a => a.classList.toggle('on', a.dataset.v === v));
+  renderContent();
+}
+window.addEventListener('hashchange', () => {
+  const h = location.hash.replace('#/', '');
+  if (S.me && VIEWS[h] && h !== S.view) go(h);
+});
+window.addEventListener('resize', () => { if (S.redraw) S.redraw(); });
+
+async function renderContent(){
+  const c = $('#content'); if (!c) return;
+  closeModal();
+  c.innerHTML = '<div class="muted">Loading…</div>';
+  const view = S.view;
+  try { await VIEWS[view](c); }
+  catch (e) { if (S.view === view && S.me) c.innerHTML = `<div class="card"><div class="err">${esc(e.message)}</div></div>`; }
+}
+async function loadSites(){
+  S.sites = await api('GET', '/sites');
+  if (!S.sites.some(s => s.id === S.siteId)) S.siteId = S.sites[0]?.id ?? null;
+  store.set('site', S.siteId);
+}
+async function pickSite(id){
+  if (!id) return;
+  S.siteId = id; store.set('site', id);
+  renderTop(); renderContent();
+}
+async function loadSiteData(){
+  const q = `?site_id=${S.siteId}`;
+  const [habitats, power, batteries, teams, equipment, deliveries, tasks, windows] = await Promise.all([
+    api('GET', '/habitats' + q), api('GET', '/power-sources' + q), api('GET', '/batteries' + q), api('GET', '/teams' + q),
+    api('GET', '/equipment' + q), api('GET', '/deliveries' + q), api('GET', '/tasks' + q), api('GET', '/illumination-windows' + q)
+  ]);
+  S.d = {habitats, power, batteries, teams, equipment, deliveries, tasks, illumination: windows};
+}
+function requireSite(c){
+  if (S.siteId) return true;
+  c.innerHTML = `<div class="card"><h2>No site selected</h2>
+    <p class="muted">Everything here belongs to a site. ${canWrite() ? 'Create one on the Sites page' : 'Ask a planner or admin to create one'}${isAdmin() ? ', or load the demo data.' : '.'}</p>
+    ${canWrite() ? `<button class="btn primary" onclick="go('sites')">Go to Sites</button>` : ''}
+    ${isAdmin() ? `<button class="btn" onclick="seedDemo()">Load demo data</button>` : ''}</div>`;
+  return false;
+}
+async function seedDemo(){
+  if (!confirm('Create the "Demo Base" site with sample data?')) return;
+  try {
+    const r = await api('POST', '/demo/seed');
+    toast('Demo site created');
+    await loadSites(); S.siteId = r.site_id; store.set('site', S.siteId);
+    renderTop(); go('dashboard');
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+// ======================================================================
+// Entity definitions (drive the generic CRUD pages)
+// ======================================================================
+const ENT = {
+  sites: {
+    single: 'site', title: 'Sites', path: '/sites', scoped: false, del: 'admin', update: true,
+    list: () => S.sites,
+    fields: [
+      {key:'name', label:'Name', type:'text', req:1, max:100},
+      {key:'latitude', label:'Latitude (−90…90)', type:'number', min:-90, max:90},
+      {key:'longitude', label:'Longitude (−180…180)', type:'number', min:-180, max:180}
+    ],
+    cols: [['ID', o => o.id], ['Name', o => esc(o.name)], ['Latitude', o => o.latitude ?? '—'], ['Longitude', o => o.longitude ?? '—']],
+    extra: o => o.id === S.siteId ? '<span class="badge ok">selected</span>' : `<button class="btn sm" onclick="pickSite(${o.id})">Select</button>`,
+    note: () => isAdmin() ? `<button class="btn" onclick="seedDemo()">Load demo data</button> <span class="muted small">Deleting a site deletes everything in it (admin only).</span>` : '<span class="muted small">Only admins can delete sites.</span>'
+  },
+  illumination: {
+    single: 'illumination window', title: 'Illumination windows', path: '/illumination-windows', scoped: true, update: false,
+    fields: [
+      {key:'start_time', label:'Start (UTC)', type:'datetime', req:1, def: nowInput},
+      {key:'end_time', label:'End (UTC)', type:'datetime', req:1, def: () => addInput(24)}
+    ],
+    check: o => pd(o.end_time) <= pd(o.start_time) ? 'End must be after start' : null,
+    cols: [['ID', o => o.id], ['Start (UTC)', o => fmt(o.start_time)], ['End (UTC)', o => fmt(o.end_time)],
+           ['Duration (h)', o => num((pd(o.end_time) - pd(o.start_time)) / 36e5)]],
+    note: () => {
+      const now = new Date();
+      const lit = S.d.illumination.some(w => pd(w.start_time) <= now && now < pd(w.end_time));
+      return `Right now the site is ${lit ? '<span class="badge ok">lit</span>' : '<span class="badge mute">dark</span>'} . Anything outside a window is dark. Windows can be created and deleted, not edited.`;
+    }
+  },
+  habitats: {
+    single: 'habitat', title: 'Habitats', path: '/habitats', scoped: true, update: true,
+    fields: [{key:'name', label:'Name', type:'text', req:1, max:100}],
+    cols: [['ID', o => o.id], ['Name', o => esc(o.name)],
+           ['Equipment', o => { const e = S.d.equipment.filter(x => x.habitat_id === o.id); return e.length ? esc(e.map(x => x.name).join(', ')) : '—'; }]]
+  },
+  power: {
+    single: 'power source', title: 'Power sources', path: '/power-sources', scoped: true, update: true,
+    fields: [
+      {key:'name', label:'Name', type:'text', req:1, max:100},
+      {key:'max_output_kw', label:'Max output (kW, > 0)', type:'number', req:1, gt:0},
+      {key:'is_available', label:'Available', type:'bool', def:true}
+    ],
+    cols: [['ID', o => o.id], ['Name', o => esc(o.name)], ['Max output (kW)', o => num(o.max_output_kw)],
+           ['Available', o => o.is_available ? badge('available') : '<span class="badge mute">unavailable</span>']],
+    note: () => `All sources are solar. Output while lit (available sources only): <b>${num(S.d.power.filter(p => p.is_available).reduce((a, p) => a + p.max_output_kw, 0))} kW</b>.`
+  },
+  batteries: {
+    single: 'battery', title: 'Batteries', path: '/batteries', scoped: true, update: true,
+    fields: [
+      {key:'name', label:'Name', type:'text', req:1, max:100},
+      {key:'capacity_kwh', label:'Capacity (kWh, > 0)', type:'number', req:1, gt:0},
+      {key:'charge_kwh', label:'Current charge (kWh, ≥ 0, ≤ capacity)', type:'number', req:1, min:0}
+    ],
+    check: o => o.charge_kwh > o.capacity_kwh ? 'Charge cannot exceed capacity' : null,
+    cols: [['ID', o => o.id], ['Name', o => esc(o.name)], ['Capacity (kWh)', o => num(o.capacity_kwh)],
+           ['Charge (kWh)', o => `${num(o.charge_kwh)} <span class="muted">(${Math.round(o.charge_kwh / o.capacity_kwh * 100)}%)</span><div class="bar"><i style="width:${Math.min(100, o.charge_kwh / o.capacity_kwh * 100)}%"></i></div>`]],
+    extra: o => `<button class="btn sm" onclick="openForecast(${o.id})">Forecast</button>`,
+    note: () => `Total stored: <b>${num(sum(S.d.batteries, 'charge_kwh'))}</b> / ${num(sum(S.d.batteries, 'capacity_kwh'))} kWh.`
+  },
+  teams: {
+    single: 'team', title: 'Teams', path: '/teams', scoped: true, update: true,
+    fields: [
+      {key:'name', label:'Name', type:'text', req:1, max:100},
+      {key:'specialization', label:'Specialization', type:'text', max:100}
+    ],
+    cols: [['ID', o => o.id], ['Name', o => esc(o.name)], ['Specialization', o => esc(o.specialization || '—')],
+           ['Tasks', o => S.d.tasks.filter(t => t.team_id === o.id).length]]
+  },
+  equipment: {
+    single: 'equipment', title: 'Equipment', path: '/equipment', scoped: true, update: true,
+    fields: [
+      {key:'name', label:'Name', type:'text', req:1, max:100},
+      {key:'power_kw', label:'Power draw (kW, ≥ 0)', type:'number', req:1, min:0},
+      {key:'status', label:'Status', type:'select', options: () => ENUMS.equipment, def:'available'},
+      {key:'priority', label:'Priority (1–5, 5 = most critical)', type:'prio', def:1},
+      {key:'habitat_id', label:'Habitat', type:'fk', options: () => S.d.habitats}
+    ],
+    cols: [['ID', o => o.id], ['Name', o => esc(o.name)], ['Power (kW)', o => num(o.power_kw)], ['Priority', o => prioBadge(o.priority)],
+           ['Status', o => badge(o.status)], ['Habitat', o => nm(S.d.habitats, o.habitat_id)],
+           ['Delivery', o => { const d = S.d.deliveries.find(x => x.equipment_id === o.id); return d ? badge(d.status) : '—'; }]]
+  },
+  deliveries: {
+    single: 'delivery', title: 'Deliveries', path: '/deliveries', scoped: true, update: true,
+    fields: [
+      {key:'equipment_id', label:'Equipment (one delivery per item)', type:'fk', req:1, createOnly:true,
+        options: () => S.d.equipment.filter(e => !S.d.deliveries.some(d => d.equipment_id === e.id))},
+      {key:'expected_arrival', label:'Expected arrival (UTC)', type:'datetime', req:1, def: nowInput},
+      {key:'setup_hours', label:'Setup time after arrival (hours, ≥ 0)', type:'number', req:1, min:0, def:0},
+      {key:'status', label:'Status', type:'select', options: () => ENUMS.delivery, def:'in_transit'}
+    ],
+    cols: [['ID', o => o.id], ['Equipment', o => nm(S.d.equipment, o.equipment_id)], ['Expected arrival (UTC)', o => fmt(o.expected_arrival)],
+           ['Setup (h)', o => num(o.setup_hours)], ['Ready at (UTC)', o => addH(o.expected_arrival, o.setup_hours)], ['Status', o => badge(o.status)]],
+    note: () => 'A task conflicts when it starts before arrival + setup, unless the delivery is marked installed.'
+  },
+  tasks: {
+    single: 'task', title: 'Tasks', path: '/tasks', scoped: true, update: true,
+    fields: [
+      {key:'name', label:'Name', type:'text', req:1, max:150},
+      {key:'start_time', label:'Start (UTC)', type:'datetime', req:1, def: nowInput},
+      {key:'duration_hours', label:'Duration (hours, > 0)', type:'number', req:1, gt:0, def:1},
+      {key:'priority', label:'Priority (1–5, 5 = most critical)', type:'prio', def:1},
+      {key:'status', label:'Status', type:'select', options: () => ENUMS.task, def:'planned'},
+      {key:'team_id', label:'Team', type:'fk', options: () => S.d.teams},
+      {key:'equipment_ids', label:'Equipment used', type:'multi', options: () => S.d.equipment, get: o => o.equipment.map(e => e.id)}
+    ],
+    cols: [['ID', o => o.id], ['Name', o => esc(o.name)], ['Start (UTC)', o => fmt(o.start_time)], ['Ends (UTC)', o => addH(o.start_time, o.duration_hours)],
+           ['Dur (h)', o => num(o.duration_hours)], ['Priority', o => prioBadge(o.priority)], ['Status', o => badge(o.status)],
+           ['Team', o => nm(S.d.teams, o.team_id)],
+           ['Equipment', o => o.equipment.length ? esc(o.equipment.map(e => e.name).join(', ')) + ` <span class="muted">(${num(sum(o.equipment, 'power_kw'))} kW)</span>` : '—']],
+    note: () => 'Only planned and in-progress tasks draw power in the forecast and are checked for delivery conflicts.'
+  }
+};
+const entList = key => ENT[key].scoped ? S.d[key] : ENT[key].list();
+
+// ======================================================================
+// Generic CRUD page
+// ======================================================================
+async function entityView(c, key){
+  const E = ENT[key];
+  if (E.scoped) { if (!requireSite(c)) return; await loadSiteData(); }
+  else await loadSites();
+  const w = canWrite();
+  c.innerHTML = `<div class="head"><h1>${E.title}</h1><span class="sp"></span>
+      <input id="q" placeholder="Filter…" style="width:200px" value="${esc(S.filter)}" oninput="S.filter=this.value;drawTable('${key}')">
+      ${w ? `<button class="btn primary" onclick="openForm('${key}')">+ New ${E.single}</button>` : ''}</div>
+    ${E.note ? `<p class="muted">${E.note()}</p>` : ''}
+    ${!w ? '<div class="note">Read-only: your role is viewer.</div>' : ''}
+    <div class="card"><div class="tblwrap" id="tbl"></div></div>`;
+  drawTable(key);
+}
+function drawTable(key){
+  const E = ENT[key], w = canWrite();
+  const canDel = E.del === 'admin' ? isAdmin() : w;
+  const f = S.filter.toLowerCase();
+  const rows = entList(key).filter(o => !f || E.cols.map(c => String(c[1](o))).join(' ').replace(/<[^>]+>/g, ' ').toLowerCase().includes(f));
+  const hasAct = (w && E.update) || canDel || E.extra;
+  $('#tbl').innerHTML = rows.length ? `<table><thead><tr>${E.cols.map(c => `<th>${c[0]}</th>`).join('')}${hasAct ? '<th></th>' : ''}</tr></thead><tbody>
+    ${rows.map(o => `<tr>${E.cols.map(c => `<td>${c[1](o)}</td>`).join('')}${hasAct ? `<td class="act">
+      ${E.extra ? E.extra(o) : ''}
+      ${w && E.update ? `<button class="btn sm" onclick="openForm('${key}',${o.id})">Edit</button>` : ''}
+      ${canDel ? `<button class="btn sm danger" onclick="delItem('${key}',${o.id})">Delete</button>` : ''}</td>` : ''}</tr>`).join('')}
+    </tbody></table>` : `<div class="muted">${entList(key).length ? 'No match.' : 'Nothing here yet.'}</div>`;
+}
+
+function getVal(f, obj){
+  let v = f.get ? f.get(obj) : obj[f.key];
+  if (f.type === 'datetime' && v) v = toInput(v);
+  return v;
+}
+function fieldHTML(f, val){
+  const lbl = `<span class="lbl">${esc(f.label)}${f.req ? ' *' : ''}</span>`;
+  const k = esc(f.key);
+  switch (f.type) {
+    case 'text': return `<label>${lbl}<input name="${k}" value="${esc(val ?? '')}" ${f.max ? `maxlength="${f.max}"` : ''}></label>`;
+    case 'number': return `<label>${lbl}<input name="${k}" type="number" step="any" value="${val ?? ''}"></label>`;
+    case 'datetime': return `<label>${lbl}<input name="${k}" type="datetime-local" step="60" value="${esc(val ?? '')}"></label>`;
+    case 'bool': return `<label class="fld chk"><input name="${k}" type="checkbox" ${val ? 'checked' : ''}><span>${esc(f.label)}</span></label>`;
+    case 'prio': return `<label>${lbl}<select name="${k}">${[1,2,3,4,5].map(n => `<option value="${n}" ${+val === n ? 'selected' : ''}>${n}${n === 5 ? ' (most critical)' : n === 1 ? ' (lowest)' : ''}</option>`).join('')}</select></label>`;
+    case 'select': return `<label>${lbl}<select name="${k}">${f.options().map(o => `<option value="${o}" ${o === val ? 'selected' : ''}>${esc(pretty(o))}</option>`).join('')}</select></label>`;
+    case 'fk': return `<label>${lbl}<select name="${k}">${f.req ? '' : '<option value="">— none —</option>'}${f.options().map(o => `<option value="${o.id}" ${o.id === val ? 'selected' : ''}>${esc(o.name)}</option>`).join('')}</select></label>`;
+    case 'multi': {
+      const opts = f.options(), sel = new Set(val || []);
+      return `<div style="margin-bottom:10px">${lbl}<div class="multi" data-key="${k}">${opts.length ? opts.map(o =>
+        `<label><input type="checkbox" value="${o.id}" ${sel.has(o.id) ? 'checked' : ''}> ${esc(o.name)} <span class="muted">(${num(o.power_kw)} kW)</span></label>`).join('') : '<span class="muted">None available at this site</span>'}</div></div>`;
+    }
+  }
+  return '';
+}
+function readField(f, form){
+  const q = n => form.elements[n];
+  switch (f.type) {
+    case 'bool': return {value: q(f.key).checked};
+    case 'multi': return {value: [...form.querySelectorAll(`.multi[data-key="${f.key}"] input:checked`)].map(i => +i.value)};
+    case 'prio': return {value: +q(f.key).value};
+    case 'select': return {value: q(f.key).value};
+    case 'fk': { const v = q(f.key).value; if (v === '') return f.req ? {error:'required'} : {value:null}; return {value:+v}; }
+    case 'text': { const v = q(f.key).value.trim(); if (!v) return f.req ? {error:'required'} : {value:null}; return {value:v}; }
+    case 'datetime': { const v = q(f.key).value; return v ? {value:v} : {error:'required'}; }
+    case 'number': {
+      const s = q(f.key).value.trim();
+      if (s === '') return f.req ? {error:'required'} : {value:null};
+      const n = Number(s);
+      if (!isFinite(n)) return {error:'must be a number'};
+      if (f.gt !== undefined && !(n > f.gt)) return {error:`must be greater than ${f.gt}`};
+      if (f.min !== undefined && n < f.min) return {error:`must be at least ${f.min}`};
+      if (f.max !== undefined && n > f.max) return {error:`must be at most ${f.max}`};
+      return {value:n};
+    }
+  }
+}
+const sameVal = (f, a, b) => {
+  const norm = v => f.type === 'multi' ? JSON.stringify([...(v || [])].sort((x, y) => x - y)) : JSON.stringify(v ?? null);
+  return norm(a) === norm(b);
+};
+const toWire = (f, v) => (f.type === 'datetime' && v) ? toIso(v) : v;
+
+async function openForm(key, id){
+  const E = ENT[key];
+  let obj = null;
+  if (id != null) {
+    try { obj = await api('GET', `${E.path}/${id}`); }          // fresh copy via GET /{id}
+    catch (e) { toast(e.message, 'err'); return; }
+  }
+  const fields = E.fields.filter(f => id == null ? !f.updateOnly : !f.createOnly);
+  if (id == null && E.scoped && !S.siteId) { toast('Select a site first', 'err'); return; }
+  const missing = fields.find(f => f.req && (f.type === 'fk') && f.options().length === 0);
+  if (missing && id == null) { toast(`Nothing to choose for "${missing.label}" at this site. Create it first.`, 'err'); return; }
+  S.form = {key, id, obj, fields};
+  modal(`<h2>${id == null ? 'New' : 'Edit'} ${E.single}</h2>
+    <form id="mf" onsubmit="return submitForm(event)">
+      ${fields.map(f => fieldHTML(f, obj ? getVal(f, obj) : (typeof f.def === 'function' ? f.def() : f.def))).join('')}
+      <div class="err" id="mferr"></div>
+      <div class="actions"><button type="button" class="btn" onclick="closeModal()">Cancel</button><button class="btn primary">Save</button></div>
+    </form>`);
+}
+async function submitForm(ev){
+  ev.preventDefault();
+  const {key, id, obj, fields} = S.form, E = ENT[key], form = ev.target;
+  const showErr = m => { $('#mferr').textContent = m; };
+  const out = {};
+  for (const f of fields) {
+    const r = readField(f, form);
+    if (r.error) { showErr(`${f.label}: ${r.error}`); return false; }
+    out[f.key] = r.value;
+  }
+  if (E.check) { const m = E.check(out); if (m) { showErr(m); return false; } }
+  try {
+    if (id == null) {
+      const body = {};
+      fields.forEach(f => body[f.key] = toWire(f, out[f.key]));
+      if (E.scoped) body.site_id = S.siteId;
+      await api('POST', E.path, body);
+    } else {
+      const diff = {};
+      fields.forEach(f => { if (!sameVal(f, getVal(f, obj), out[f.key])) diff[f.key] = toWire(f, out[f.key]); });
+      if (!Object.keys(diff).length) { closeModal(); return false; }
+      await api('PATCH', `${E.path}/${id}`, diff);
+    }
+    closeModal(); toast('Saved');
+    if (key === 'sites') { await loadSites(); renderTop(); }
+    renderContent();
+  } catch (e) { showErr(e.message); }
+  return false;
+}
+async function delItem(key, id){
+  const E = ENT[key];
+  const msg = key === 'sites' ? 'Delete this site and EVERYTHING in it (habitats, equipment, tasks, batteries…)?' : `Delete this ${E.single}?`;
+  if (!confirm(msg)) return;
+  try {
+    await api('DELETE', `${E.path}/${id}`);
+    toast('Deleted');
+    if (key === 'sites') { await loadSites(); renderTop(); }
+    renderContent();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+// ======================================================================
+// Charts (canvas, no libraries)
+// ======================================================================
+function drawChart(cv, o){
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  if (!W) return;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const m = {l: 52, r: 12, t: 12, b: 24}, pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const T = o.times.map(t => t.getTime()), t0 = T[0], t1 = T[T.length - 1];
+  const X = t => m.l + (t - t0) / ((t1 - t0) || 1) * pw;
+  let max = o.ymax != null ? o.ymax : Math.max(0, ...o.series.flatMap(s => s.data)) * 1.1;
+  if (!(max > 0)) max = 1;
+  const Y = v => m.t + ph - (v / max) * ph;
+
+  g.clearRect(0, 0, W, H);
+  g.fillStyle = 'rgba(138,151,181,0.16)';                       // no generation = shaded
+  for (let i = 0; i < T.length - 1; i++) if (o.shade[i]) g.fillRect(X(T[i]), m.t, X(T[i + 1]) - X(T[i]) + 0.5, ph);
+
+  g.font = '11px system-ui'; g.fillStyle = '#8a97b5'; g.strokeStyle = '#243256'; g.lineWidth = 1;
+  g.textAlign = 'right'; g.textBaseline = 'middle';
+  for (let i = 0; i <= 4; i++) {
+    const v = max * i / 4, y = Y(v);
+    g.beginPath(); g.moveTo(m.l, y); g.lineTo(W - m.r, y); g.stroke();
+    g.fillText(v.toFixed(max < 10 ? 1 : 0), m.l - 6, y);
+  }
+  g.textAlign = 'center'; g.textBaseline = 'top';
+  for (let i = 0; i <= 4; i++) {
+    const t = t0 + (t1 - t0) * i / 4;
+    g.fillText(new Date(t).toISOString().slice(5, 16).replace('T', ' '), Math.min(Math.max(X(t), m.l + 28), W - 30), H - m.b + 6);
+  }
+  o.series.forEach(s => {
+    g.beginPath(); g.strokeStyle = s.color; g.lineWidth = 2; g.setLineDash(s.dash ? [6, 4] : []);
+    s.data.forEach((v, i) => { const x = X(T[i]), y = Y(v); i ? g.lineTo(x, y) : g.moveTo(x, y); });
+    g.stroke();
+  });
+  g.setLineDash([]);
+  if (o.marker && o.marker.getTime() >= t0 && o.marker.getTime() <= t1) {
+    const x = X(o.marker.getTime());
+    g.strokeStyle = '#f87171'; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(x, m.t); g.lineTo(x, m.t + ph); g.stroke(); g.setLineDash([]);
+  }
+  const tip = cv.parentElement.querySelector('.tip');
+  cv.onmousemove = ev => {
+    const r = cv.getBoundingClientRect(), x = ev.clientX - r.left;
+    let i = Math.round(((x - m.l) / pw) * (T.length - 1));
+    i = Math.max(0, Math.min(T.length - 1, i));
+    tip.innerHTML = `${fmtD(o.times[i])} UTC` + (o.shade[i] ? ' (dark)' : '') + '<br>' + o.series.map(s => `${s.label}: ${s.data[i]} ${o.unit}`).join('<br>');
+    tip.style.display = 'block';
+    tip.style.left = Math.min(x + 12, W - 190) + 'px'; tip.style.top = '8px';
+  };
+  cv.onmouseleave = () => { tip.style.display = 'none'; };
+}
+function forecastCard(r){
+  const name = nm(S.d.batteries, r.battery_id), id = r.battery_id;
+  return `<div style="margin-top:14px"><h2>${name}
+      ${r.shortage_expected ? `<span class="badge bad">shortage from ${fmt(r.first_shortage_time)} UTC</span>` : '<span class="badge ok">no shortage</span>'}</h2>
+    <div class="muted small">Now ${num(r.current_charge_kwh)} / ${num(r.capacity_kwh)} kWh · lowest predicted ${num(r.min_charge_kwh)} kWh · shaded = no generation (dark) · red line = first shortage</div>
+    <div class="legend"><span><i style="background:#5eead4"></i>Charge (kWh)</span><span><i style="background:#94a3b8"></i>Capacity</span></div>
+    <div class="chartwrap"><canvas id="c1_${id}"></canvas><div class="tip"></div></div>
+    <div class="legend"><span><i style="background:#fb923c"></i>Load (kW)</span><span><i style="background:#facc15"></i>Generation (kW)</span> <span>(this battery's share of site totals)</span></div>
+    <div class="chartwrap short"><canvas id="c2_${id}"></canvas><div class="tip"></div></div></div>`;
+}
+function drawForecasts(res){
+  const draw = () => res.forEach(r => {
+    const times = r.points.map(p => pd(p.time));
+    const shade = r.points.map(p => p.generation_kw === 0);
+    const c1 = $('#c1_' + r.battery_id), c2 = $('#c2_' + r.battery_id);
+    if (c1) drawChart(c1, {times, shade, unit:'kWh', ymax: r.capacity_kwh * 1.05, marker: r.first_shortage_time ? pd(r.first_shortage_time) : null, series: [
+      {label:'Charge', color:'#5eead4', data: r.points.map(p => p.predicted_charge_kwh)},
+      {label:'Capacity', color:'#94a3b8', dash:true, data: r.points.map(() => r.capacity_kwh)}]});
+    if (c2) drawChart(c2, {times, shade, unit:'kW', series: [
+      {label:'Load', color:'#fb923c', data: r.points.map(p => p.load_kw)},
+      {label:'Generation', color:'#facc15', data: r.points.map(p => p.generation_kw)}]});
+  });
+  S.redraw = draw; draw();
+}
+
+// ======================================================================
+// Dashboard
+// ======================================================================
+async function dashboardView(c){
+  if (!requireSite(c)) return;
+  const sid = S.siteId;
+  const [, conf, budget, fc] = await Promise.all([
+    loadSiteData(),
+    api('GET', `/sites/${sid}/conflicts`),
+    api('GET', `/sites/${sid}/power-budget`),
+    api('GET', `/sites/${sid}/forecast?horizon_hours=72&step_minutes=60`)
+  ]);
+  const d = S.d, site = S.sites.find(s => s.id === sid);
+  const out = d.power.filter(p => p.is_available).reduce((a, p) => a + p.max_output_kw, 0);
+  const now = new Date();
+  const lit = d.illumination.some(w => pd(w.start_time) <= now && now < pd(w.end_time));
+  const live = d.tasks.filter(t => t.status === 'planned' || t.status === 'in_progress');
+  const pending = d.deliveries.filter(x => x.status !== 'installed');
+  const upcoming = live.filter(t => pd(t.start_time).getTime() + t.duration_hours * 3600e3 > now.getTime())
+    .sort((a, b) => pd(a.start_time) - pd(b.start_time)).slice(0, 6);
+
+  const alerts = [];
+  if (!d.batteries.length) alerts.push(['warn', 'No batteries configured, so no forecast is available.']);
+  fc.forEach(r => alerts.push(r.shortage_expected
+    ? ['bad', `Battery “${esc(nmRaw(d.batteries, r.battery_id))}” runs empty at ${fmt(r.first_shortage_time)} UTC (lowest predicted charge ${num(r.min_charge_kwh)} kWh, next 72 h).`]
+    : ['ok', `Battery “${esc(nmRaw(d.batteries, r.battery_id))}” stays above ${num(r.min_charge_kwh)} kWh for the next 72 h.`]));
+  alerts.push(budget.overloaded
+    ? ['bad', `Power budget: peak load ${num(budget.peak_load_kw)} kW exceeds solar output ${num(budget.available_output_kw)} kW in the next 24 h. Tasks involved: ${esc(budget.conflicting_task_ids.map(i => nmRaw(d.tasks, i)).join(', '))}.`]
+    : ['ok', `Power budget: peak load ${num(budget.peak_load_kw)} kW fits under solar output ${num(budget.available_output_kw)} kW (next 24 h).`]);
+  if (conf.conflicts.length) conf.conflicts.forEach(x => alerts.push(['bad', 'Delivery conflict: ' + esc(x.reason)]));
+  else alerts.push(['ok', 'No task starts before its equipment is delivered and set up.']);
+
+  c.innerHTML = `<div class="head"><h1>${esc(site?.name || 'Site')}</h1>
+      <span class="badge ${lit ? 'ok' : 'mute'}">${lit ? 'lit now' : 'dark now'}</span><span class="sp"></span>
+      <button class="btn" onclick="go('planner')">Open planner</button></div>
+    <div class="grid">
+      <div class="stat"><span class="muted">Solar output (available)</span><b>${num(out)} kW</b></div>
+      <div class="stat"><span class="muted">Battery stored</span><b>${num(sum(d.batteries, 'charge_kwh'))} / ${num(sum(d.batteries, 'capacity_kwh'))} kWh</b></div>
+      <div class="stat"><span class="muted">Live tasks</span><b>${live.length}</b></div>
+      <div class="stat"><span class="muted">Equipment</span><b>${d.equipment.length}</b></div>
+      <div class="stat"><span class="muted">Deliveries pending</span><b>${pending.length}</b></div>
+    </div>
+    <div class="card"><h2>Status</h2>${alerts.map(([k, m]) => `<div class="alert ${k}"><b>${k === 'ok' ? 'OK' : k === 'warn' ? 'NOTE' : 'ALERT'}</b><span>${m}</span></div>`).join('')}</div>
+    <div class="card"><h2>Upcoming tasks</h2>${upcoming.length ? `<div class="tblwrap"><table><thead><tr><th>Name</th><th>Start (UTC)</th><th>Ends (UTC)</th><th>Priority</th><th>Status</th><th>Team</th></tr></thead><tbody>
+      ${upcoming.map(t => `<tr><td>${esc(t.name)}</td><td>${fmt(t.start_time)}</td><td>${addH(t.start_time, t.duration_hours)}</td><td>${prioBadge(t.priority)}</td><td>${badge(t.status)}</td><td>${nm(d.teams, t.team_id)}</td></tr>`).join('')}
+      </tbody></table></div>` : '<div class="muted">No upcoming live tasks.</div>'}</div>
+    <div class="card"><h2>72-hour battery forecast</h2>${fc.length ? fc.map(forecastCard).join('') : '<div class="muted">No batteries.</div>'}</div>`;
+  if (fc.length) drawForecasts(fc);
+}
+
+// ======================================================================
+// Planner (forecast / power budget / conflicts)
+// ======================================================================
+function openForecast(batteryId){ S.plBattery = String(batteryId); go('planner'); }
+async function plannerView(c){
+  if (!requireSite(c)) return;
+  await loadSiteData();
+  c.innerHTML = `<div class="head"><h1>Planner</h1></div>
+    <p class="muted">All times are UTC. Leave a start or window blank to use the current time.</p>
+    <div class="card"><h2>Battery forecast</h2>
+      <div class="row">
+        <label><span class="lbl">Start (UTC)</span><input id="fs" type="datetime-local"></label>
+        <label><span class="lbl">Horizon (hours, max 1500)</span><input id="fh" type="number" value="72" min="1" max="1500" step="any"></label>
+        <label><span class="lbl">Step (minutes)</span><input id="fst" type="number" value="60" min="1" max="1440"></label>
+        <label><span class="lbl">Battery</span><select id="fb"><option value="all">All batteries (site forecast)</option>
+          ${S.d.batteries.map(b => `<option value="${b.id}">${esc(b.name)}</option>`).join('')}</select></label>
+        <button class="btn primary" onclick="runForecast()">Run forecast</button>
+      </div><div id="fres"></div></div>
+    <div class="card"><h2>Power budget</h2>
+      <p class="muted small">Do overlapping tasks fit under the site's total solar output? (Nameplate output of available sources; the dark is covered by the battery forecast.)</p>
+      <div class="row">
+        <label><span class="lbl">Window start (UTC)</span><input id="bs" type="datetime-local"></label>
+        <label><span class="lbl">Window end (UTC)</span><input id="be" type="datetime-local"></label>
+        <button class="btn primary" onclick="runBudget()">Check budget</button>
+      </div><div id="bres"></div></div>
+    <div class="card"><h2>Delivery conflicts</h2>
+      <div class="row"><button class="btn primary" onclick="runConflicts()">Check conflicts</button></div><div id="cres"></div></div>`;
+  if ([...$('#fb').options].some(o => o.value === S.plBattery)) $('#fb').value = S.plBattery; else S.plBattery = 'all';
+  runForecast(); runBudget(); runConflicts();
+}
+async function runForecast(){
+  const el = $('#fres'); if (!el) return;
+  el.innerHTML = '<div class="muted">Running…</div>';
+  const p = new URLSearchParams();
+  if ($('#fs').value) p.set('start', toIso($('#fs').value));
+  p.set('horizon_hours', $('#fh').value || 72);
+  p.set('step_minutes', $('#fst').value || 60);
+  const b = $('#fb').value; S.plBattery = b;
+  try {
+    const res = b === 'all' ? await api('GET', `/sites/${S.siteId}/forecast?${p}`) : [await api('GET', `/batteries/${b}/forecast?${p}`)];
+    if (!res.length) { el.innerHTML = '<div class="muted">No batteries at this site.</div>'; return; }
+    el.innerHTML = res.map(forecastCard).join('');
+    drawForecasts(res);
+  } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+async function runBudget(){
+  const el = $('#bres'); if (!el) return;
+  const p = new URLSearchParams();
+  if ($('#bs').value) p.set('window_start', toIso($('#bs').value));
+  if ($('#be').value) p.set('window_end', toIso($('#be').value));
+  try {
+    const r = await api('GET', `/sites/${S.siteId}/power-budget?${p}`);
+    el.innerHTML = `<div class="alert ${r.overloaded ? 'bad' : 'ok'}"><b>${r.overloaded ? 'OVERLOADED' : 'OK'}</b>
+      <span>Peak load ${num(r.peak_load_kw)} kW vs available solar output ${num(r.available_output_kw)} kW, window ${fmt(r.window_start)} → ${fmt(r.window_end)} UTC.</span></div>
+      ${r.conflicting_task_ids.length ? `<div class="muted">Tasks running during overload:</div><ul>${r.conflicting_task_ids.map(i => `<li>${esc(nmRaw(S.d.tasks, i))} <span class="muted">(#${i})</span></li>`).join('')}</ul>` : ''}`;
+  } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+async function runConflicts(){
+  const el = $('#cres'); if (!el) return;
+  try {
+    const r = await api('GET', `/sites/${S.siteId}/conflicts`);
+    el.innerHTML = r.conflicts.length ? `<div class="tblwrap"><table><thead><tr><th>Task</th><th>Equipment</th><th>Available from (UTC)</th><th>Reason</th></tr></thead><tbody>
+      ${r.conflicts.map(x => `<tr><td>${nm(S.d.tasks, x.task_id)}</td><td>${nm(S.d.equipment, x.equipment_id)}</td><td>${fmt(x.available_from)}</td><td>${esc(x.reason)}</td></tr>`).join('')}</tbody></table></div>`
+      : '<div class="alert ok"><b>OK</b><span>No task starts before its equipment is ready.</span></div>';
+  } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+
+// ======================================================================
+// Users (admin) + Settings
+// ======================================================================
+async function usersView(c){
+  if (!isAdmin()) { c.innerHTML = '<div class="card"><div class="err">Admin only.</div></div>'; return; }
+  const [users, roles] = await Promise.all([api('GET', '/users'), api('GET', '/roles')]);
+  c.innerHTML = `<div class="head"><h1>Users</h1></div>
+    <p class="muted">New sign-ups are viewers. Change roles here. You cannot change or delete your own account.</p>
+    <div class="card"><div class="tblwrap"><table><thead><tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th></th></tr></thead><tbody>
+    ${users.map(u => { const me = u.id === S.me.id; return `<tr><td>${u.id}</td><td>${esc(u.username)}${me ? ' <span class="badge info">you</span>' : ''}</td><td>${esc(u.email)}</td>
+      <td><select style="width:auto" ${me ? 'disabled' : ''} onchange="changeRole(${u.id},this)" data-prev="${u.role_id}">
+        ${roles.map(r => `<option value="${r.id}" ${r.id === u.role_id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select></td>
+      <td class="act"><button class="btn sm" onclick="viewUser(${u.id})">Details</button>
+        <button class="btn sm danger" ${me ? 'disabled' : ''} onclick="delUser(${u.id})">Delete</button></td></tr>`; }).join('')}
+    </tbody></table></div></div>`;
+}
+async function changeRole(uid, sel){
+  if (!confirm('Change this user\'s role?')) { sel.value = sel.dataset.prev; return; }
+  try { await api('PATCH', `/users/${uid}/role`, {role_id: +sel.value}); toast('Role updated'); renderContent(); }
+  catch (e) { toast(e.message, 'err'); sel.value = sel.dataset.prev; }
+}
+async function viewUser(uid){
+  try {
+    const u = await api('GET', `/users/${uid}`);
+    modal(`<h2>${esc(u.username)}</h2><pre>${esc(JSON.stringify(u, null, 2))}</pre><div class="actions"><button class="btn" onclick="closeModal()">Close</button></div>`);
+  } catch (e) { toast(e.message, 'err'); }
+}
+async function delUser(uid){
+  if (!confirm('Delete this user permanently? Their token stops working immediately.')) return;
+  try { await api('DELETE', `/users/${uid}`); toast('User deleted'); renderContent(); }
+  catch (e) { toast(e.message, 'err'); }
+}
+
+async function settingsView(c){
+  const [me, roles] = await Promise.all([api('GET', '/auth/me'), api('GET', '/roles')]);
+  S.me = me; renderTop();
+  c.innerHTML = `<div class="head"><h1>Settings</h1></div>
+    <div class="card"><h2>Account</h2>
+      <p>${esc(me.username)} · ${esc(me.email)} · role <span class="badge info">${esc(me.role.name)}</span></p>
+      <p class="muted small">Viewer: read everything. Planner: viewer + create/edit/delete planning data. Admin: planner + users, deleting sites, demo data.</p></div>
+    <div class="card"><h2>Roles in the system</h2>${roles.map(r => `<span class="badge mute" style="margin-right:6px">${r.id}: ${esc(r.name)}</span>`).join('')}</div>
+    <div class="card"><h2>API connection</h2>
+      <div class="row"><label><span class="lbl">API URL</span><input id="apiurl" value="${esc(S.api)}"></label>
+        <button class="btn" onclick="saveApi()">Save &amp; test</button></div><span id="apist" class="muted small"></span></div>
+    ${isAdmin() ? `<div class="card"><h2>Demo data</h2>
+      <p class="muted">Creates "Demo Base": a lit/dark cycle, a battery that runs dry, and a rover task that starts before its delivery.</p>
+      <button class="btn" onclick="seedDemo()">Load demo data</button></div>` : ''}`;
+}
+
+// ======================================================================
+const VIEWS = {
+  dashboard: dashboardView,
+  planner: plannerView,
+  tasks: c => entityView(c, 'tasks'),
+  equipment: c => entityView(c, 'equipment'),
+  deliveries: c => entityView(c, 'deliveries'),
+  teams: c => entityView(c, 'teams'),
+  habitats: c => entityView(c, 'habitats'),
+  power: c => entityView(c, 'power'),
+  batteries: c => entityView(c, 'batteries'),
+  illumination: c => entityView(c, 'illumination'),
+  sites: c => entityView(c, 'sites'),
+  users: usersView,
+  settings: settingsView
+};
+
+boot();
+</script>
+</body>
+</html>
