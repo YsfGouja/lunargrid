@@ -21,6 +21,14 @@ def _to_utc_naive(v: datetime | None) -> datetime | None:
     return v
 
 
+def _validate_task_payloads(value):
+    if value is not None and any(
+        not key.isdigit() or amount < 0 or amount > 10000 for key, amount in value.items()
+    ):
+        raise ValueError("Task payloads need numeric task IDs and weights from 0 to 10,000 kg")
+    return value
+
+
 # Roles
 class RoleBase(BaseModel):
     name: str = Field(min_length=1, max_length=30)
@@ -351,6 +359,7 @@ class BatteryForecastResponse(BaseModel):
     shortage_expected: bool
     first_shortage_time: datetime | None = None
     min_charge_kwh: float
+    sunlight_source: str = "saved illumination windows"
 
 
 # Power budget: do overlapping tasks fit under the site's total solar output?
@@ -375,3 +384,157 @@ class TaskConflict(BaseModel):
 class ConflictReportResponse(BaseModel):
     site_id: int
     conflicts: list[TaskConflict]
+
+
+# JPL Sun position. Values are true coordinates; `sunlit` uses elevation > 0°.
+class SiteSunlightPoint(BaseModel):
+    time: datetime
+    azimuth_deg: float | None = None
+    elevation_deg: float | None = None
+    sunlit: bool
+
+
+class SiteSunlightResponse(BaseModel):
+    site_id: int
+    source: str
+    current: SiteSunlightPoint | None = None
+    points: list[SiteSunlightPoint]
+    note: str | None = None
+
+
+# Rover mission comparison. Results stay predictive until the user saves them.
+class MissionSimulationRequest(BaseModel):
+    origin_site_id: int
+    destination_site_id: int
+    waypoint_site_ids: list[int] = Field(default_factory=list, max_length=5)
+    task_ids: list[int] = Field(default_factory=list, max_length=20)
+    departure_time: datetime | None = None
+    return_trip: bool = False
+    optimize_order: bool = False
+    sun_mode: str = Field(default="live", pattern="^(live|manual)$")
+    rover_charges: dict[str, float] = Field(default_factory=dict)
+    task_payload_kg: dict[str, float] = Field(default_factory=dict)
+    plan_id: int | None = None
+
+    @field_validator("task_payload_kg")
+    @classmethod
+    def valid_payloads(cls, value):
+        return _validate_task_payloads(value)
+
+    @field_validator("departure_time", mode="after")
+    @classmethod
+    def to_utc(cls, v):
+        return _to_utc_naive(v)
+
+
+class MissionTaskSummary(BaseModel):
+    id: int
+    name: str
+    duration_hours: float
+    power_kw: float
+    payload_kg: float = 0
+
+
+class MissionTimelinePoint(BaseModel):
+    time: datetime
+    battery_kwh: float
+    phase: str
+
+
+class RoverMissionResult(BaseModel):
+    rover_id: str
+    rover_name: str
+    success: bool
+    reason: str
+    data_type: str
+    source_url: str | None = None
+    battery_capacity_kwh: float
+    start_charge_kwh: float
+    end_charge_kwh: float
+    reserve_kwh: float
+    drive_energy_kwh: float
+    work_energy_kwh: float
+    solar_energy_kwh: float
+    travel_hours: float
+    mission_hours: float
+    distance_km: float
+    payload_kg: float
+    max_payload_kg: float
+    timeline: list[MissionTimelinePoint]
+
+
+class MissionSimulationResponse(BaseModel):
+    origin_site: str
+    destination_site: str
+    route: list[str]
+    return_trip: bool
+    distance_km: float
+    departure_time: datetime
+    sunlight_source: str
+    optimized_order: bool
+    note: str | None = None
+    tasks: list[MissionTaskSummary]
+    results: list[RoverMissionResult]
+    recommended_task_ids: list[int]
+
+
+class MissionPlanCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    route_site_ids: list[int] = Field(min_length=2, max_length=7)
+    task_ids: list[int] = Field(default_factory=list, max_length=20)
+    return_trip: bool = False
+    rover_charges: dict[str, float] = Field(default_factory=dict)
+    task_payload_kg: dict[str, float] = Field(default_factory=dict)
+
+    @field_validator("task_payload_kg")
+    @classmethod
+    def valid_payloads(cls, value):
+        return _validate_task_payloads(value)
+
+
+class MissionPlanUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    route_site_ids: list[int] | None = Field(default=None, min_length=2, max_length=7)
+    task_ids: list[int] | None = Field(default=None, max_length=20)
+    return_trip: bool | None = None
+    rover_charges: dict[str, float] | None = None
+    task_payload_kg: dict[str, float] | None = None
+
+    @field_validator("task_payload_kg")
+    @classmethod
+    def valid_payloads(cls, value):
+        return _validate_task_payloads(value)
+
+
+class MissionPlanShareRequest(BaseModel):
+    email: EmailStr
+
+
+class MissionPlanResponse(BaseModel):
+    id: int
+    owner_id: int
+    name: str
+    route_site_ids: list[int]
+    task_ids: list[int]
+    return_trip: bool
+    rover_charges: dict[str, float]
+    task_payload_kg: dict[str, float]
+    shared_user_ids: list[int]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SimulationAdvanceRequest(BaseModel):
+    hours: int = Field(gt=0, le=24)
+
+
+class SimulationAdvanceResponse(BaseModel):
+    site_id: int
+    current_time: datetime
+    advanced_hours: float
+    batteries: list[BatteryResponse]
+
+
+class SiteSimulationClockResponse(BaseModel):
+    site_id: int
+    current_time: datetime

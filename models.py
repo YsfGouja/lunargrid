@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     Table,
     CheckConstraint,
+    JSON,
 )
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import relationship
@@ -219,3 +220,28 @@ class Delivery(Base):
 
     site = relationship("Site", back_populates="deliveries")
     equipment = relationship("Equipment", back_populates="delivery")
+
+
+class MissionPlan(Base):
+    """A saved, shareable rover scenario. Battery values are simulated plan state."""
+
+    __tablename__ = "mission_plans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(100), nullable=False)
+    route_site_ids = Column(JSON, nullable=False)
+    task_ids = Column(JSON, nullable=False, default=list)
+    return_trip = Column(Boolean, nullable=False, default=False)
+    rover_charges = Column(JSON, nullable=False, default=dict)
+    task_payload_kg = Column(JSON, nullable=False, default=dict)
+    shared_user_ids = Column(JSON, nullable=False, default=list)
+
+
+class SiteSimulationClock(Base):
+    """Clock for advancing a local base-power scenario without real telemetry."""
+
+    __tablename__ = "site_simulation_clocks"
+
+    site_id = Column(Integer, ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True)
+    current_time = Column(DateTime, nullable=False)
