@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Moon Base Power Planner</title>
+<title>LunarGrid</title>
 <style>
 :root{--bg:#0b1020;--panel:#121a30;--panel2:#18223f;--line:#243256;--tx:#e6ebf5;--mut:#8a97b5;--acc:#5eead4;--warn:#fbbf24;--bad:#f87171;--ok:#4ade80;--info:#60a5fa}
 *{box-sizing:border-box}
@@ -40,6 +40,9 @@ header .sp{flex:1}
 .stat b{display:block;font-size:20px;margin-top:2px}
 .btn{background:var(--panel2);color:var(--tx);border:1px solid var(--line);padding:7px 12px;border-radius:8px;cursor:pointer;font:inherit}
 .btn:hover{border-color:var(--acc)}
+.demo-hover{position:relative}
+.demo-hover::after{content:attr(data-hover);position:absolute;left:0;bottom:calc(100% + 8px);width:min(290px,calc(100vw - 40px));padding:10px 12px;border:1px solid var(--acc);border-radius:8px;background:#07101f;color:var(--tx);font-size:12px;line-height:1.4;text-align:left;white-space:normal;box-shadow:0 8px 24px #0009;opacity:0;visibility:hidden;transform:translateY(4px);transition:opacity .15s,transform .15s;z-index:30;pointer-events:none}
+.demo-hover:hover::after,.demo-hover:focus-visible::after{opacity:1;visibility:visible;transform:translateY(0)}
 .btn.primary{background:var(--acc);color:#04201c;border-color:var(--acc);font-weight:600}
 .btn.danger{color:var(--bad)}
 .btn.sm{padding:3px 8px;font-size:12px}
@@ -106,7 +109,7 @@ pre{background:#0e1630;padding:10px;border-radius:8px;overflow:auto;margin:0}
 
 <script>
 /* ======================================================================
-   Moon Base Power Planner - frontend
+   LunarGrid - lunar mission power planning
    All timestamps from the API are naive UTC. Everything shown/entered here is UTC.
    ====================================================================== */
 
@@ -148,9 +151,12 @@ const ENUMS = {
 
 // ---------- state ----------
 const S = {
-  api: (store.get('api') === 'http://127.0.0.1:8000'
-    ? 'http://127.0.0.1:8081'
-    : store.get('api') || 'http://127.0.0.1:8081').replace(/\/+$/, ''),
+  api: (() => {
+    const defaultApi = location.protocol === 'file:' ? 'http://127.0.0.1:8081' : location.origin;
+    const savedApi = store.get('api');
+    const oldLocalDefault = /^https?:\/\/(127\.0\.0\.1|localhost):(8000|8081)$/i.test(savedApi || '');
+    return (savedApi && !oldLocalDefault ? savedApi : defaultApi).replace(/\/+$/, '');
+  })(),
   token: sess.get('token'),
   me: null,
   sites: [],
@@ -222,7 +228,7 @@ function closeModal(){ $('#modal')?.remove(); }
 function authScreen(note){
   const reg = S.authMode === 'register';
   $('#app').innerHTML = `<div class="authwrap"><div class="card auth">
-    <h1>Moon Base Power Planner</h1>
+    <h1>LunarGrid</h1>
     <div class="tabs">
       <button class="${reg ? '' : 'on'}" onclick="setAuth('login')">Sign in</button>
       <button class="${reg ? 'on' : ''}" onclick="setAuth('register')">Create account</button>
@@ -289,13 +295,13 @@ async function boot(){
 // ======================================================================
 const NAV = [
   ['Overview', [['dashboard','Dashboard'], ['planner','Planner']]],
-  ['Operations', [['tasks','Tasks'], ['equipment','Equipment'], ['deliveries','Deliveries'], ['teams','Teams']]],
+  ['Operations', [['tasks','Tasks'], ['equipment','Equipment'], ['deliveries','Deliveries'], ['teams','Teams'], ['simulation','Simulation']]],
   ['Infrastructure', [['habitats','Habitats'], ['power','Power sources'], ['batteries','Batteries'], ['illumination','Illumination']]],
   ['Admin', [['sites','Sites'], ['users','Users'], ['settings','Settings']]]
 ];
 function renderShell(){
   $('#app').innerHTML = `<div class="shell">
-    <aside><div class="brand">MOON BASE PLANNER</div>
+    <aside><div class="brand">LUNARGRID</div>
       ${NAV.map(([g, items]) => `<div class="navgrp">${g}</div>` + items
         .filter(([k]) => k !== 'users' || isAdmin())
         .map(([k, l]) => `<a data-v="${k}" onclick="go('${k}')">${l}</a>`).join('')).join('')}
@@ -314,6 +320,7 @@ function renderTop(){
 }
 function go(v){
   if (!VIEWS[v]) v = 'dashboard';
+  if (v !== 'dashboard' && window.sunRefreshTimer) clearInterval(window.sunRefreshTimer);
   S.view = v; S.filter = ''; S.redraw = null;
   if (location.hash !== '#/' + v) location.hash = '#/' + v;
   document.querySelectorAll('aside a').forEach(a => a.classList.toggle('on', a.dataset.v === v));
@@ -360,10 +367,10 @@ function requireSite(c){
   return false;
 }
 async function seedDemo(){
-  if (!confirm('Create the "Demo Base" site with sample data?')) return;
+  if (!confirm('Load or reset the judge demo? This refreshes the Judge Demo test rows and Demo Base clock; it does not delete your other data.')) return;
   try {
     const r = await api('POST', '/demo/seed');
-    toast('Demo site created');
+    toast('Judge demo ready: 3 sites, mixed task and delivery cases, and a saved rover plan');
     await loadSites(); S.siteId = r.site_id; store.set('site', S.siteId);
     renderTop(); go('dashboard');
   } catch (e) { toast(e.message, 'err'); }
@@ -644,7 +651,7 @@ function drawChart(cv, o){
 
   g.clearRect(0, 0, W, H);
   g.fillStyle = 'rgba(138,151,181,0.16)';                       // no generation = shaded
-  for (let i = 0; i < T.length - 1; i++) if (o.shade[i]) g.fillRect(X(T[i]), m.t, X(T[i + 1]) - X(T[i]) + 0.5, ph);
+  for (let i = 0; i < T.length - 1; i++) if (o.shade?.[i]) g.fillRect(X(T[i]), m.t, X(T[i + 1]) - X(T[i]) + 0.5, ph);
 
   g.font = '11px system-ui'; g.fillStyle = '#8a97b5'; g.strokeStyle = '#243256'; g.lineWidth = 1;
   g.textAlign = 'right'; g.textBaseline = 'middle';
@@ -673,7 +680,7 @@ function drawChart(cv, o){
     const r = cv.getBoundingClientRect(), x = ev.clientX - r.left;
     let i = Math.round(((x - m.l) / pw) * (T.length - 1));
     i = Math.max(0, Math.min(T.length - 1, i));
-    tip.innerHTML = `${fmtD(o.times[i])} UTC` + (o.shade[i] ? ' (dark)' : '') + '<br>' + o.series.map(s => `${s.label}: ${s.data[i]} ${o.unit}`).join('<br>');
+    tip.innerHTML = `${fmtD(o.times[i])} UTC` + (o.shade?.[i] ? ' (dark)' : '') + '<br>' + o.series.map(s => `${s.label}: ${s.data[i]} ${o.unit}`).join('<br>');
     tip.style.display = 'block';
     tip.style.left = Math.min(x + 12, W - 190) + 'px'; tip.style.top = '8px';
   };
@@ -710,16 +717,17 @@ function drawForecasts(res){
 async function dashboardView(c){
   if (!requireSite(c)) return;
   const sid = S.siteId;
-  const [, conf, budget, fc] = await Promise.all([
+  const [, conf, budget, fc, sun] = await Promise.all([
     loadSiteData(),
     api('GET', `/sites/${sid}/conflicts`),
     api('GET', `/sites/${sid}/power-budget`),
-    api('GET', `/sites/${sid}/forecast?horizon_hours=72&step_minutes=60`)
+    api('GET', `/sites/${sid}/forecast?horizon_hours=72&step_minutes=60`),
+    api('GET', `/sites/${sid}/sunlight?horizon_hours=24&step_minutes=60`).catch(() => null)
   ]);
   const d = S.d, site = S.sites.find(s => s.id === sid);
   const out = d.power.filter(p => p.is_available).reduce((a, p) => a + p.max_output_kw, 0);
   const now = new Date();
-  const lit = d.illumination.some(w => pd(w.start_time) <= now && now < pd(w.end_time));
+  const lit = sun?.current?.sunlit ?? d.illumination.some(w => pd(w.start_time) <= now && now < pd(w.end_time));
   const live = d.tasks.filter(t => t.status === 'planned' || t.status === 'in_progress');
   const pending = d.deliveries.filter(x => x.status !== 'installed');
   const upcoming = live.filter(t => pd(t.start_time).getTime() + t.duration_hours * 3600e3 > now.getTime())
@@ -737,8 +745,9 @@ async function dashboardView(c){
   else alerts.push(['ok', 'No task starts before its equipment is delivered and set up.']);
 
   c.innerHTML = `<div class="head"><h1>${esc(site?.name || 'Site')}</h1>
-      <span class="badge ${lit ? 'ok' : 'mute'}">${lit ? 'lit now' : 'dark now'}</span><span class="sp"></span>
+      <span id="sunBadge" class="badge ${lit ? 'ok' : 'mute'}">${lit ? 'sunlight now' : 'in shadow now'}</span><span class="sp"></span>
       <button class="btn" onclick="go('planner')">Open planner</button></div>
+    <p id="sunDetail" class="muted small">${sun ? `${esc(sun.source)}${sun.current?.elevation_deg == null ? '' : ` · Sun elevation ${num(sun.current.elevation_deg)}°`}${sun.note ? ` · ${esc(sun.note)}` : ''} · Local hills/terrain are not included.` : 'Live Sun position needs site coordinates; using saved illumination windows.'}</p>
     <div class="grid">
       <div class="stat"><span class="muted">Solar output (available)</span><b>${num(out)} kW</b></div>
       <div class="stat"><span class="muted">Battery stored</span><b>${num(sum(d.batteries, 'charge_kwh'))} / ${num(sum(d.batteries, 'capacity_kwh'))} kWh</b></div>
@@ -746,12 +755,29 @@ async function dashboardView(c){
       <div class="stat"><span class="muted">Equipment</span><b>${d.equipment.length}</b></div>
       <div class="stat"><span class="muted">Deliveries pending</span><b>${pending.length}</b></div>
     </div>
+    <div class="card"><h2>Sunlight at this site · next 24 hours</h2>
+      ${sun?.points?.length ? `<p class="muted small">1 = Sun above the local horizon · 0 = shadow. Forecast source: ${esc(sun.source)}.</p><div class="chartwrap short"><canvas id="sunlightChart"></canvas><div class="tip"></div></div>` : '<p class="muted">Add this site’s Moon coordinates to calculate live sunlight times.</p>'}</div>
     <div class="card"><h2>Status</h2>${alerts.map(([k, m]) => `<div class="alert ${k}"><b>${k === 'ok' ? 'OK' : k === 'warn' ? 'NOTE' : 'ALERT'}</b><span>${m}</span></div>`).join('')}</div>
     <div class="card"><h2>Upcoming tasks</h2>${upcoming.length ? `<div class="tblwrap"><table><thead><tr><th>Name</th><th>Start (UTC)</th><th>Ends (UTC)</th><th>Priority</th><th>Status</th><th>Team</th></tr></thead><tbody>
       ${upcoming.map(t => `<tr><td>${esc(t.name)}</td><td>${fmt(t.start_time)}</td><td>${addH(t.start_time, t.duration_hours)}</td><td>${prioBadge(t.priority)}</td><td>${badge(t.status)}</td><td>${nm(d.teams, t.team_id)}</td></tr>`).join('')}
       </tbody></table></div>` : '<div class="muted">No upcoming live tasks.</div>'}</div>
-    <div class="card"><h2>72-hour battery forecast</h2>${fc.length ? fc.map(forecastCard).join('') : '<div class="muted">No batteries.</div>'}</div>`;
+    <div class="card"><h2>72-hour battery forecast</h2><p class="muted small">Sunlight source: ${esc(fc[0]?.sunlight_source || 'saved illumination windows')}</p>${fc.length ? fc.map(forecastCard).join('') : '<div class="muted">No batteries.</div>'}</div>`;
   if (fc.length) drawForecasts(fc);
+  if(sun?.points?.length>1){
+    const points=sun.points;
+    drawChart($('#sunlightChart'),{times:points.map(p=>pd(p.time)),unit:'sun state',ymax:1,shade:points.map(p=>!p.sunlit),series:[{label:'Sun above horizon',color:'#facc15',data:points.map(p=>p.sunlit?1:0)}]});
+  }
+  if (window.sunRefreshTimer) clearInterval(window.sunRefreshTimer);
+  window.sunRefreshTimer=setInterval(async()=>{
+    if(S.view!=='dashboard'||S.siteId!==sid)return;
+    try{
+      const latest=await api('GET',`/sites/${sid}/sunlight?horizon_hours=24&step_minutes=60`);
+      const badge=$('#sunBadge'), detail=$('#sunDetail'); if(!badge||!detail)return;
+      badge.textContent=latest.current?.sunlit?'sunlight now':'in shadow now';
+      badge.className='badge '+(latest.current?.sunlit?'ok':'mute');
+      detail.textContent=`${latest.source}${latest.current?.elevation_deg==null?'':` · Sun elevation ${num(latest.current.elevation_deg)}°`}${latest.note?' · '+latest.note:''}`;
+    }catch{}
+  },300000);
 }
 
 // ======================================================================
@@ -779,8 +805,7 @@ async function plannerView(c){
         <label><span class="lbl">Window end (UTC)</span><input id="be" type="datetime-local"></label>
         <button class="btn primary" onclick="runBudget()">Check budget</button>
       </div><div id="bres"></div></div>
-    <div class="card"><h2>Delivery conflicts</h2>
-      <div class="row"><button class="btn primary" onclick="runConflicts()">Check conflicts</button></div><div id="cres"></div></div>`;
+    <div class="card"><h2>Delivery conflicts</h2><div id="cres"></div></div>`;
   if ([...$('#fb').options].some(o => o.value === S.plBattery)) $('#fb').value = S.plBattery; else S.plBattery = 'all';
   runForecast(); runBudget(); runConflicts();
 }
@@ -819,6 +844,266 @@ async function runConflicts(){
       ${r.conflicts.map(x => `<tr><td>${nm(S.d.tasks, x.task_id)}</td><td>${nm(S.d.equipment, x.equipment_id)}</td><td>${fmt(x.available_from)}</td><td>${esc(x.reason)}</td></tr>`).join('')}</tbody></table></div>`
       : '<div class="alert ok"><b>OK</b><span>No task starts before its equipment is ready.</span></div>';
   } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+
+// ======================================================================
+// Rover simulation and saved plans.
+// ======================================================================
+let missionTaskRows = [], missionRovers = [], missionPlans = [], missionPlanId = null, missionResult = null;
+async function simulationView(c){
+  if (S.sites.length < 2) {
+    c.innerHTML = `<div class="head"><h1>Rover simulation</h1></div><div class="card"><p>Add at least two sites and their coordinates first. The admin demo creates two sample sites.</p>${isAdmin() ? '<button class="btn primary" onclick="seedDemo()">Load demo data</button>' : ''}</div>`;
+    return;
+  }
+  [missionRovers, missionPlans] = await Promise.all([api('GET', '/mission-rovers'), api('GET', '/mission-plans')]);
+  missionPlanId = null; missionResult = null;
+  const origin = S.sites[0].id, destination = S.sites.find(s => s.id !== origin).id;
+  const hasJudgeDemo = S.sites.some(s => s.name === 'Demo Base') &&
+    S.sites.some(s => s.name === 'Demo Ridge') && S.sites.some(s => s.name === 'Demo Crater Relay');
+  const clock = await api('GET', `/sites/${S.siteId}/simulation-clock`);
+  c.innerHTML = `<div class="head"><h1>Rover simulation</h1></div>
+    <p class="muted">Plan surface work, compare rover batteries, then save or share the scenario. Results are planning estimates, not rover telemetry.</p>
+    <div class="card"><h2>Base power clock</h2><p class="muted">Selected site time: <b id="simClock">${fmt(clock.current_time)} UTC</b>. Advance one simulated hour to update saved battery charge using the site forecast.</p>
+      <button class="btn" ${canWrite() ? '' : 'disabled'} onclick="advanceBaseSimulation()">Advance base by 1 hour</button>
+      <span class="muted small">This changes battery charge in the database.</span></div>
+    <div class="card"><h2>Judge demo shortcuts</h2>
+      ${hasJudgeDemo ? `<p class="muted">Run Quick Trip at full charge to see a mix of passes and failures, then run it at low charge to show the same mission becoming a no-go.</p>
+        <div class="row"><button class="btn demo-hover" data-hover="Same 148.69 km sample pickup. Full batteries should let the Cargo Hauler pass while the Apollo LRV and Lunar Scout fail." aria-label="Quick trip, full charge. Same 148.69 km sample pickup. Cargo Hauler should pass; Apollo LRV and Lunar Scout should fail." onclick="applyDemoScenario('quick')">Quick trip · full charge</button>
+        <button class="btn demo-hover" data-hover="Same route and sample pickup, but every rover starts at 12% charge. Expect all three to fail from low battery." aria-label="Quick trip, low charge. Same route and sample pickup, but every rover starts at 12% charge. Expect all three to fail." onclick="applyDemoScenario('quicklow')">Quick trip · low charge</button>
+        <button class="btn" onclick="applyDemoScenario('cargo')">Heavy cargo · payload limit</button>
+        <button class="btn" onclick="applyDemoScenario('drill')">Drill run · energy demand</button>
+        <button class="btn" onclick="applyDemoScenario('return')">Waypoint + return · longer route</button>
+        <button class="btn" onclick="applyDemoScenario('low')">Low battery · no-go case</button>
+        <button class="btn" onclick="applyDemoScenario('order')">Multiple tasks · suggested order</button>
+        <button class="btn" onclick="applyDemoScenario('manual')">Saved sunlight windows</button>
+        <button class="btn" onclick="applyDemoScenario('relay')">Relay mission · high load</button>
+        <button class="btn" onclick="viewRelayOutage()">Open relay outage dashboard</button></div>`
+        : `<p class="muted">Load the judge demo first to show pass/fail cases, task states, delivery conflicts, and a saved plan.</p>${isAdmin() ? '<button class="btn primary" onclick="seedDemo()">Load judge demo data</button>' : ''}`}
+    </div>
+    <div class="card"><h2>Mission plan</h2><div class="row">
+      <label><span class="lbl">Start site</span><select id="msOrigin" onchange="updateMissionDestination()">${S.sites.map(s => `<option value="${s.id}" ${s.id === origin ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>
+      <label><span class="lbl">Destination</span><select id="msDestination" onchange="updateMissionWaypointDestination()">${S.sites.filter(s => s.id !== origin).map(s => `<option value="${s.id}" ${s.id === destination ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>
+      <label><span class="lbl">Leave at (UTC)</span><input id="msDeparture" type="datetime-local" value="${nowInput()}"></label>
+      <label><span class="lbl">Waypoints (optional)</span><select id="msWaypoints" multiple size="3">${S.sites.filter(s => s.id !== origin && s.id !== destination).map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select></label>
+    </div><div class="row"><label class="fld chk"><input id="msReturn" type="checkbox"><span>Return to start</span></label>
+      <label class="fld chk"><input id="msOptimize" type="checkbox"><span>Find a better task order (up to 6 tasks)</span></label>
+      <label><span class="lbl">Sunlight source</span><select id="msSunMode"><option value="live">Live JPL Sun position</option><option value="manual">Saved sunlight windows</option></select></label></div>
+    <h3>Starting battery by rover</h3><div id="missionRovers" class="grid"></div>
+    <h3>Destination task queue</h3><div id="missionTasks" class="muted">Loading tasks…</div>
+    <p class="muted small">A rover’s battery is tracked through driving and selected work. Solar charging during work uses the destination Sun forecast. Cargo is checked against payload limits but does not change energy use. Route distances are straight-line waypoint legs; terrain and obstacles are not modeled.</p>
+    <button class="btn primary" onclick="runMissionSimulation()">Compare rovers</button> <button class="btn" onclick="runMissionSimulation(true)">Suggest task order</button>
+    ${canWrite() ? `<hr><h3>Save and share this plan</h3><div class="row"><label><span class="lbl">Plan name</span><input id="missionPlanName" value="My lunar route"></label>
+      <button class="btn" onclick="saveMissionPlan()">Save plan</button><button class="btn" onclick="updateMissionPlan()" id="updateMissionPlanBtn" disabled>Update saved plan</button></div>
+      <div class="row"><label><span class="lbl">Saved plans (yours and shared)</span><select id="missionSavedPlans" onchange="loadMissionPlan(+this.value)"><option value="">Choose a plan…</option>${missionPlans.map(p => `<option value="${p.id}">${esc(p.name)}${p.owner_id === S.me.id ? ' (you)' : ' (shared)'}</option>`).join('')}</select></label>
+      <label><span class="lbl">Share with registered user email</span><input id="missionShareEmail" type="email" placeholder="planner@example.com"></label><button class="btn" onclick="shareMissionPlan()">Share</button></div>` : `<p class="muted">Planner or admin role is needed to save and share plans.</p>`}
+    <div id="missionResults"></div></div>`;
+  renderMissionRovers();
+  await loadMissionTasks();
+}
+function updateMissionDestination(){
+  const originId = +$('#msOrigin').value, destination = $('#msDestination');
+  const oldValue = +destination.value;
+  const selectedWaypoints = [...$('#msWaypoints').selectedOptions].map(o => +o.value);
+  destination.innerHTML = S.sites.filter(s => s.id !== originId).map(s => `<option value="${s.id}" ${s.id === oldValue ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
+  refreshMissionWaypoints(selectedWaypoints);
+  loadMissionTasks();
+}
+function updateMissionWaypointDestination(){
+  const selected=[...$('#msWaypoints').selectedOptions].map(o=>+o.value);
+  refreshMissionWaypoints(selected); loadMissionTasks();
+}
+function refreshMissionWaypoints(selected=[]){
+  const origin=+$('#msOrigin').value, destination=+$('#msDestination').value, el=$('#msWaypoints');
+  el.innerHTML=S.sites.filter(s=>s.id!==origin&&s.id!==destination).map(s=>`<option value="${s.id}" ${selected.includes(s.id)?'selected':''}>${esc(s.name)}</option>`).join('');
+}
+function renderMissionRovers(charges={}){
+  const el = $('#missionRovers'); if (!el) return;
+  el.innerHTML = missionRovers.map(r => `<label class="stat"><span class="lbl">${esc(r.name)}</span><input type="number" id="roverCharge_${esc(r.id)}" min="0" max="${r.battery_kwh}" step="0.1" value="${charges[r.id] ?? r.battery_kwh}"><span class="muted small">of ${num(r.battery_kwh)} kWh · ${esc(r.data_type)}</span></label>`).join('');
+}
+async function loadMissionTasks(){
+  const el = $('#missionTasks'); if (!el) return;
+  const destination = $('#msDestination').value;
+  try {
+    const tasks = await api('GET', `/tasks?site_id=${destination}`);
+    missionTaskRows = tasks.filter(t => t.status === 'planned' || t.status === 'in_progress');
+    renderMissionTasks();
+  } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+async function applyDemoScenario(kind){
+  const base=S.sites.find(s=>s.name==='Demo Base');
+  const ridge=S.sites.find(s=>s.name==='Demo Ridge');
+  const relay=S.sites.find(s=>s.name==='Demo Crater Relay');
+  if(!base||!ridge||!relay){toast('Load the judge demo data first','err');return;}
+  const cases={
+    quick:{destination:ridge,tasks:['Quick sample pickup'],payload:25},
+    quicklow:{destination:ridge,tasks:['Quick sample pickup'],payload:25,charge:.12},
+    cargo:{destination:ridge,tasks:['Heavy cargo delivery'],payload:900},
+    drill:{destination:ridge,tasks:['Ridge drill run'],payload:300},
+    return:{destination:ridge,tasks:['Quick sample pickup'],payload:25,waypoint:relay,returnTrip:true},
+    low:{destination:ridge,tasks:['Ridge drill run'],payload:300,charge:.12},
+    order:{destination:ridge,tasks:['Quick sample pickup','Ridge drill run','Night power test'],optimize:true},
+    manual:{destination:ridge,tasks:['Quick sample pickup'],payload:25,sun:'manual'},
+    relay:{destination:relay,tasks:['Relay outage drill'],sun:'manual'}
+  };
+  const scenario=cases[kind];
+  $('#msOrigin').value=base.id;
+  $('#msDestination').innerHTML=S.sites.filter(s=>s.id!==base.id).map(s=>`<option value="${s.id}" ${s.id===scenario.destination.id?'selected':''}>${esc(s.name)}</option>`).join('');
+  $('#msDestination').value=scenario.destination.id;
+  refreshMissionWaypoints(scenario.waypoint?[scenario.waypoint.id]:[]);
+  $('#msReturn').checked=!!scenario.returnTrip;
+  $('#msOptimize').checked=!!scenario.optimize;
+  $('#msSunMode').value=scenario.sun||'live';
+  missionPlanId=null;
+  if($('#missionSavedPlans'))$('#missionSavedPlans').value='';
+  if($('#updateMissionPlanBtn'))$('#updateMissionPlanBtn').disabled=true;
+  await loadMissionTasks();
+  const selected=missionTaskRows.filter(t=>scenario.tasks.some(name=>t.name.includes(name)));
+  if(selected.length!==scenario.tasks.length){toast('A demo task is missing; load the judge demo data again','err');return;}
+  renderMissionTasks(selected.map(t=>t.id),Object.fromEntries(selected.map(t=>[t.id,scenario.payload||0])));
+  renderMissionRovers(scenario.charge?Object.fromEntries(missionRovers.map(r=>[r.id,r.battery_kwh*scenario.charge])):{});
+  $('#missionResults').innerHTML='';
+  toast('Demo case ready. Press Compare rovers to run it.');
+}
+function viewRelayOutage(){
+  const relay=S.sites.find(s=>s.name==='Demo Crater Relay');
+  if(!relay){toast('Load the judge demo data first','err');return;}
+  S.siteId=relay.id; store.set('site',relay.id); renderTop(); go('dashboard');
+}
+function renderMissionTasks(selectedIds=[], payloads={}){
+  const el = $('#missionTasks'); if (!el) return;
+  el.innerHTML = missionTaskRows.length ? `<div class="tblwrap"><table><thead><tr><th>Use</th><th>Order</th><th>Task</th><th>Equipment load</th><th>Duration</th><th>Payload (kg)</th></tr></thead><tbody>${missionTaskRows.map((t,index) => {
+      const power = t.equipment.reduce((sum, equipment) => sum + equipment.power_kw, 0);
+      return `<tr data-task-id="${t.id}"><td><input type="checkbox" value="${t.id}" ${selectedIds.includes(t.id) ? 'checked' : ''} aria-label="Include ${esc(t.name)}"></td>
+      <td><button class="btn sm" onclick="moveMissionTask(${t.id},-1)" aria-label="Move task up" ${index===0?'disabled':''}>↑</button> <button class="btn sm" onclick="moveMissionTask(${t.id},1)" aria-label="Move task down" ${index===missionTaskRows.length-1?'disabled':''}>↓</button></td>
+      <td>${esc(t.name)}</td><td>${num(power)} kW</td><td>${num(t.duration_hours)} h</td><td><input class="taskPayload" type="number" min="0" max="10000" step="1" value="${payloads[t.id] ?? 0}" aria-label="Payload for ${esc(t.name)} in kilograms"></td></tr>`;
+    }).join('')}</tbody></table></div><p class="muted small">Tasks run in the order shown. Move them with ↑ / ↓. Add an estimated cargo weight to check each rover’s payload limit.</p>` : '<p>No planned or in-progress tasks at this destination yet. You can still simulate the drive.</p>';
+}
+function moveMissionTask(id, delta){
+  const index = missionTaskRows.findIndex(t => t.id === id), next = index + delta;
+  if (next < 0 || next >= missionTaskRows.length) return;
+  const selected = [...$('#missionTasks').querySelectorAll('input[type=checkbox]:checked')].map(x => +x.value);
+  const payloads = Object.fromEntries([...$('#missionTasks').querySelectorAll('tr[data-task-id]')].map(row => [row.dataset.taskId, +row.querySelector('.taskPayload').value || 0]));
+  [missionTaskRows[index], missionTaskRows[next]] = [missionTaskRows[next], missionTaskRows[index]];
+  renderMissionTasks(selected, payloads);
+}
+function missionFormData(){
+  const selectedRows = [...$('#missionTasks').querySelectorAll('tr[data-task-id]')].filter(row => row.querySelector('input[type=checkbox]').checked);
+  return {
+    origin_site_id: +$('#msOrigin').value,
+    destination_site_id: +$('#msDestination').value,
+    waypoint_site_ids: [...$('#msWaypoints').selectedOptions].map(o => +o.value),
+    task_ids: selectedRows.map(row => +row.dataset.taskId),
+    task_payload_kg: Object.fromEntries(selectedRows.map(row => [row.dataset.taskId, +row.querySelector('.taskPayload').value || 0])),
+    rover_charges: Object.fromEntries(missionRovers.map(r => [r.id, +$(`#roverCharge_${r.id}`).value])),
+    return_trip: $('#msReturn').checked,
+    sun_mode: $('#msSunMode').value,
+    departure_time: $('#msDeparture').value ? toIso($('#msDeparture').value) : undefined
+  };
+}
+async function runMissionSimulation(forceOptimize=false){
+  const el = $('#missionResults'); if (!el) return;
+  el.innerHTML = '<p class="muted">Comparing rover plans…</p>';
+  try {
+    const data = missionFormData();
+    data.optimize_order = forceOptimize || $('#msOptimize').checked;
+    const result = await api('POST', '/mission-simulation', data);
+    missionResult = result;
+    const passed = result.results.filter(r => r.success).length;
+    el.innerHTML = `<h2>Results: ${passed} of ${result.results.length} rovers can complete the plan</h2>
+      <p class="muted">${esc(result.route.join(' → '))}${result.return_trip ? ' → back to start' : ''} · ${num(result.distance_km)} km total · ${result.tasks.length} task(s)</p>
+      <div class="alert info"><b>Sun</b><span>Source: ${esc(result.sunlight_source)}.${result.note ? ' ' + esc(result.note) : ''} Apollo rover values use NASA historical data; future rover profiles are scenario estimates.</span></div>
+      ${result.optimized_order ? `<p class="muted">Suggested task order: ${result.tasks.map(t => esc(t.name)).join(' → ')} <button class="btn sm" onclick="useSuggestedMissionOrder()">Use this order</button></p>` : ''}
+      ${canWrite() ? '<button class="btn" onclick="applyRoverEndCharges()">Use ending rover charges as next start</button>' : ''}
+      ${result.results.map(r => `<div class="card"><h3>${esc(r.rover_name)} ${r.success ? '<span class="badge ok">CAN COMPLETE</span>' : '<span class="badge bad">CANNOT COMPLETE</span>'}</h3>
+        <p>${esc(r.reason)}</p><p class="muted small">${esc(r.data_type)} ${r.source_url ? `· <a href="${esc(r.source_url)}" target="_blank" rel="noopener">source</a>` : ''}</p><div class="grid">
+          <div class="stat"><span class="muted">Battery</span><b>${num(r.start_charge_kwh)} → ${num(r.end_charge_kwh)} / ${num(r.battery_capacity_kwh)} kWh</b></div>
+          <div class="stat"><span class="muted">Travel energy</span><b>${num(r.drive_energy_kwh)} kWh</b></div>
+          <div class="stat"><span class="muted">Task energy</span><b>${num(r.work_energy_kwh)} kWh</b></div>
+          <div class="stat"><span class="muted">Cargo</span><b>${num(r.payload_kg)} / ${num(r.max_payload_kg)} kg</b></div>
+          <div class="stat"><span class="muted">Travel / total time</span><b>${num(r.travel_hours)} h / ${num(r.mission_hours)} h</b></div>
+        </div><div class="legend"><span><i style="background:#5eead4"></i>Predicted charge (kWh)</span><span><i style="background:#94a3b8"></i>15% reserve</span></div>
+        <div class="chartwrap"><canvas id="mission_${r.rover_id}"></canvas><div class="tip"></div></div></div>`).join('')}`;
+    result.results.forEach(r => {
+      const canvas = $(`#mission_${r.rover_id}`);
+      if (!canvas) return;
+      const times = r.timeline.map(point => pd(point.time));
+      drawChart(canvas, {times, unit:'kWh', ymax:r.battery_capacity_kwh * 1.05,
+        series:[
+          {label:'Charge', color:r.success ? '#5eead4' : '#f87171', data:r.timeline.map(point => point.battery_kwh)},
+          {label:'15% reserve', color:'#94a3b8', dash:true, data:r.timeline.map(() => r.reserve_kwh)}
+        ]});
+    });
+  } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+function useSuggestedMissionOrder(){
+  if (!missionResult) return;
+  const selected = missionResult.recommended_task_ids;
+  missionTaskRows.sort((a,b) => {
+    const ai=selected.indexOf(a.id), bi=selected.indexOf(b.id);
+    return ai < 0 && bi < 0 ? 0 : ai < 0 ? 1 : bi < 0 ? -1 : ai-bi;
+  });
+  renderMissionTasks(selected, Object.fromEntries(missionResult.tasks.map(t => [t.id,t.payload_kg])));
+  toast('Suggested order applied to the task queue');
+}
+async function applyRoverEndCharges(){
+  if(!missionResult)return;
+  const charges=Object.fromEntries(missionResult.results.map(r=>[r.rover_id,r.end_charge_kwh]));
+  renderMissionRovers(charges);
+  if(missionPlanId)await updateMissionPlan();
+  else toast('Ending charges loaded into the form. Save the plan to keep them.');
+}
+async function saveMissionPlan(){
+  try {
+    const data=missionFormData();
+    const plan=await api('POST','/mission-plans',{name:$('#missionPlanName').value.trim(),route_site_ids:[data.origin_site_id,...data.waypoint_site_ids,data.destination_site_id],task_ids:data.task_ids,return_trip:data.return_trip,rover_charges:data.rover_charges,task_payload_kg:data.task_payload_kg});
+    missionPlanId=plan.id; await refreshMissionPlans(); toast('Plan saved');
+  } catch(e){toast(e.message,'err');}
+}
+async function updateMissionPlan(){
+  if(!missionPlanId)return;
+  try {
+    const data=missionFormData();
+    await api('PATCH',`/mission-plans/${missionPlanId}`,{name:$('#missionPlanName').value.trim(),route_site_ids:[data.origin_site_id,...data.waypoint_site_ids,data.destination_site_id],task_ids:data.task_ids,return_trip:data.return_trip,rover_charges:data.rover_charges,task_payload_kg:data.task_payload_kg});
+    await refreshMissionPlans(); toast('Saved plan updated');
+  } catch(e){toast(e.message,'err');}
+}
+async function refreshMissionPlans(){
+  missionPlans=await api('GET','/mission-plans');
+  const select=$('#missionSavedPlans'); if(!select)return;
+  select.innerHTML='<option value="">Choose a plan…</option>'+missionPlans.map(p=>`<option value="${p.id}" ${p.id===missionPlanId?'selected':''}>${esc(p.name)}${p.owner_id===S.me.id?' (you)':' (shared)'}</option>`).join('');
+}
+async function loadMissionPlan(id){
+  if(!id){missionPlanId=null;$('#updateMissionPlanBtn').disabled=true;return;}
+  try{
+    const plan=missionPlans.find(p=>p.id===id); if(!plan)return;
+    missionPlanId=id; $('#updateMissionPlanBtn').disabled=plan.owner_id!==S.me.id;
+    const origin=plan.route_site_ids[0], destination=plan.route_site_ids.at(-1);
+    $('#msOrigin').value=origin;
+    $('#msDestination').innerHTML=S.sites.filter(s=>s.id!==origin).map(s=>`<option value="${s.id}" ${s.id===destination?'selected':''}>${esc(s.name)}</option>`).join('');
+    $('#msDestination').value=destination;
+    const waypointIds=plan.route_site_ids.slice(1,-1);
+    refreshMissionWaypoints(waypointIds);
+    $('#msReturn').checked=plan.return_trip; $('#missionPlanName').value=plan.name;
+    renderMissionRovers(plan.rover_charges);
+    await loadMissionTasks();
+    renderMissionTasks(plan.task_ids, Object.fromEntries(Object.entries(plan.task_payload_kg||{}).map(([k,v])=>[+k,v])));
+    toast('Plan loaded');
+  }catch(e){toast(e.message,'err');}
+}
+async function shareMissionPlan(){
+  if(!missionPlanId){toast('Save or load a plan first','err');return;}
+  if(missionPlans.find(p=>p.id===missionPlanId)?.owner_id!==S.me.id){toast('Only the plan owner can share it','err');return;}
+  try{
+    const plan=await api('POST',`/mission-plans/${missionPlanId}/share`,{email:$('#missionShareEmail').value.trim()});
+    missionPlans=missionPlans.map(p=>p.id===plan.id?plan:p); toast('Plan shared with that account');
+  }catch(e){toast(e.message,'err');}
+}
+async function advanceBaseSimulation(){
+  try{
+    const result=await api('POST',`/sites/${S.siteId}/simulation/advance`,{hours:1});
+    $('#simClock').textContent=fmt(result.current_time)+' UTC';
+    toast(`Advanced 1 hour; ${result.batteries.length} battery bank(s) updated`);
+  }catch(e){toast(e.message,'err');}
 }
 
 // ======================================================================
@@ -866,7 +1151,7 @@ async function settingsView(c){
       <div class="row"><label><span class="lbl">API URL</span><input id="apiurl" value="${esc(S.api)}"></label>
         <button class="btn" onclick="saveApi()">Save &amp; test</button></div><span id="apist" class="muted small"></span></div>
     ${isAdmin() ? `<div class="card"><h2>Demo data</h2>
-      <p class="muted">Creates "Demo Base": a lit/dark cycle, a battery that runs dry, and a rover task that starts before its delivery.</p>
+      <p class="muted">Loads three sites with different power levels, task states, equipment deliveries, rover outcomes, and a saved sample plan. Loading again resets these demo scenarios only; other records are not deleted.</p>
       <button class="btn" onclick="seedDemo()">Load demo data</button></div>` : ''}`;
 }
 
@@ -874,6 +1159,7 @@ async function settingsView(c){
 const VIEWS = {
   dashboard: dashboardView,
   planner: plannerView,
+  simulation: simulationView,
   tasks: c => entityView(c, 'tasks'),
   equipment: c => entityView(c, 'equipment'),
   deliveries: c => entityView(c, 'deliveries'),
